@@ -13,11 +13,34 @@ DB_FILE = os.path.join(BASE_DIR, "db.json")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Structure :
+# connected_users = {
+#   "pseudo": {
+#       "connections": {"device_id": websocket, ...},
+#       "status": "online"
+#   }
+# }
 connected_users = {}
 
 
 def default_db():
-    return {"profiles": {}, "requests": []}
+    return {
+        "profiles": {},
+        "requests": [],
+        "messages": [],
+        "hidden_history": {}
+    }
+
+
+def normalize_db(data: dict):
+    """Ajoute les nouvelles clés si db.json vient d'une ancienne version."""
+    if not isinstance(data, dict):
+        data = default_db()
+    data.setdefault("profiles", {})
+    data.setdefault("requests", [])
+    data.setdefault("messages", [])
+    data.setdefault("hidden_history", {})
+    return data
 
 
 def load_db():
@@ -25,7 +48,7 @@ def load_db():
         save_db(default_db())
     try:
         with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return normalize_db(json.load(f))
     except Exception:
         data = default_db()
         save_db(data)
@@ -33,6 +56,7 @@ def load_db():
 
 
 def save_db(data):
+    data = normalize_db(data)
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -42,7 +66,7 @@ def now_text():
 
 
 def normalize_username(username: str) -> str:
-    return username.strip()
+    return (username or "").strip()
 
 
 def username_exists(username: str) -> bool:
@@ -78,7 +102,7 @@ def save_profile(username: str, profile: dict):
 def find_request(a: str, b: str):
     db = load_db()
     for req in db["requests"]:
-        if (req["from"] == a and req["to"] == b) or (req["from"] == b and req["to"] == a):
+        if (req.get("from") == a and req.get("to") == b) or (req.get("from") == b and req.get("to") == a):
             return req
     return None
 
@@ -105,7 +129,7 @@ def set_request(from_user: str, to_user: str, status: str):
     db = load_db()
     existing = None
     for req in db["requests"]:
-        if (req["from"] == from_user and req["to"] == to_user) or (req["from"] == to_user and req["to"] == from_user):
+        if (req.get("from") == from_user and req.get("to") == to_user) or (req.get("from") == to_user and req.get("to") == from_user):
             existing = req
             break
 
@@ -137,9 +161,66 @@ def requests_for_user(username: str):
     return [r for r in db["requests"] if r.get("from") == username or r.get("to") == username]
 
 
+def save_message(sender: str, recipient: str, kind: str, message: str = "", filename: str = "", url: str = ""):
+    db = load_db()
+    rec = {
+        "id": uuid.uuid4().hex,
+        "type": kind,
+        "from": sender,
+        "to": recipient,
+        "message": message or "",
+        "filename": filename or "",
+        "url": url or "",
+        "created_at": now_text()
+    }
+    db["messages"].append(rec)
+
+    # Sécurité simple : limiter la taille du fichier JSON.
+    # Les 5000 derniers messages suffisent pour cette version de transition.
+    if len(db["messages"]) > 5000:
+        db["messages"] = db["messages"][-5000:]
+
+    save_db(db)
+    return rec
+
+
+def history_key(other: str) -> str:
+    return normalize_username(other)
+
+
+def clear_history_for_user(viewer: str, other: str):
+    db = load_db()
+    db["hidden_history"].setdefault(viewer, {})[history_key(other)] = now_text()
+    save_db(db)
+
+
+def get_history(viewer: str, other: str, limit: int = 200):
+    viewer = normalize_username(viewer)
+    other = normalize_username(other)
+    db = load_db()
+    hidden_after = db.get("hidden_history", {}).get(viewer, {}).get(history_key(other), "")
+    rows = []
+    for msg in db.get("messages", []):
+        participants_ok = (
+            (msg.get("from") == viewer and msg.get("to") == other) or
+            (msg.get("from") == other and msg.get("to") == viewer)
+        )
+        if not participants_ok:
+            continue
+        if hidden_after and msg.get("created_at", "") <= hidden_after:
+            continue
+        rows.append(msg)
+    return rows[-max(1, min(limit, 1000)):]
+
+
+def connected_usernames():
+    return [u for u, info in connected_users.items() if info.get("connections")]
+
+
 def user_payload_for(current_user: str):
     payload = []
-    for username, info in connected_users.items():
+    for username in connected_usernames():
+        info = connected_users.get(username, {})
         p = get_profile(username)
         payload.append({
             **p,
@@ -149,14 +230,22 @@ def user_payload_for(current_user: str):
     return payload
 
 
-async def send_json(username: str, payload: dict):
+async def send_json(username: str, payload: dict, exclude_device_id: str = None):
     info = connected_users.get(username)
     if not info:
         return
-    try:
-        await info["websocket"].send_text(json.dumps(payload, ensure_ascii=False))
-    except Exception:
-        pass
+    dead_devices = []
+    for device_id, websocket in list(info.get("connections", {}).items()):
+        if exclude_device_id and device_id == exclude_device_id:
+            continue
+        try:
+            await websocket.send_text(json.dumps(payload, ensure_ascii=False))
+        except Exception:
+            dead_devices.append(device_id)
+    for device_id in dead_devices:
+        info.get("connections", {}).pop(device_id, None)
+    if not info.get("connections"):
+        connected_users.pop(username, None)
 
 
 async def send_state_to(username: str):
@@ -165,18 +254,38 @@ async def send_state_to(username: str):
 
 
 async def broadcast_users():
-    for username in list(connected_users.keys()):
+    for username in list(connected_usernames()):
         await send_state_to(username)
 
 
 @app.get("/")
 async def home():
-    return {"application": "e-Res@ka Connect", "status": "actif"}
+    return {"application": "e-Res@ka Connect", "version": "4.0", "status": "actif"}
 
 
 @app.get("/test")
 async def test():
-    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p>")
+    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p><p>Version 4.0 - historique serveur.</p>")
+
+
+@app.get("/history/{username}/{other}")
+async def history(username: str, other: str, limit: int = 200):
+    username = normalize_username(username)
+    other = normalize_username(other)
+    if not username or not other:
+        return {"messages": []}
+    if not can_chat(username, other):
+        return {"messages": []}
+    return {"messages": get_history(username, other, limit)}
+
+
+@app.post("/history/clear/{username}/{other}")
+async def clear_history(username: str, other: str):
+    username = normalize_username(username)
+    other = normalize_username(other)
+    if username and other:
+        clear_history_for_user(username, other)
+    return {"ok": True}
 
 
 @app.post("/upload")
@@ -202,25 +311,22 @@ async def download_file(stored_name: str):
 async def websocket_endpoint(websocket: WebSocket, username: str):
     username = normalize_username(username)
     await websocket.accept()
+    device_id = uuid.uuid4().hex
 
     first_connection = False
     if not username_exists(username):
         first_connection = True
         save_profile(username, {"pseudo": username})
 
-    if username in connected_users:
-        await websocket.send_text(json.dumps({
-            "type": "login_error",
-            "message": "Ce pseudo est déjà connecté sur un autre appareil."
-        }, ensure_ascii=False))
-        await websocket.close()
-        return
+    if username not in connected_users:
+        connected_users[username] = {"connections": {}, "status": "online"}
+    connected_users[username]["connections"][device_id] = websocket
 
-    connected_users[username] = {"websocket": websocket, "status": "online"}
     await websocket.send_text(json.dumps({
         "type": "login_ok",
         "first_connection": first_connection,
-        "profile": get_profile(username)
+        "profile": get_profile(username),
+        "device_id": device_id
     }, ensure_ascii=False))
 
     await broadcast_users()
@@ -233,11 +339,11 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             if t == "check_username":
                 candidate = normalize_username(message.get("username", ""))
-                await send_json(username, {
+                await websocket.send_text(json.dumps({
                     "type": "username_check",
                     "username": candidate,
                     "exists": username_exists(candidate)
-                })
+                }, ensure_ascii=False))
 
             elif t == "profile_update":
                 save_profile(username, message.get("profile", {}))
@@ -247,7 +353,8 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 status = message.get("status", "online")
                 if status not in ["online", "busy", "away"]:
                     status = "online"
-                connected_users[username]["status"] = status
+                if username in connected_users:
+                    connected_users[username]["status"] = status
                 await broadcast_users()
 
             elif t == "conversation_request":
@@ -281,10 +388,10 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     "type": "conversation_quit",
                     "from": username
                 })
-                await send_json(username, {
+                await websocket.send_text(json.dumps({
                     "type": "info",
                     "message": f"Vous avez quitté la discussion avec {to_user}."
-                })
+                }, ensure_ascii=False))
                 await send_state_to(username)
                 await send_state_to(to_user)
                 await broadcast_users()
@@ -302,33 +409,71 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 await send_state_to(from_user)
                 await broadcast_users()
 
+            elif t == "clear_history":
+                other = normalize_username(message.get("with", ""))
+                if other:
+                    clear_history_for_user(username, other)
+                    await websocket.send_text(json.dumps({
+                        "type": "history_cleared",
+                        "with": other
+                    }, ensure_ascii=False))
+
             elif t == "private_message":
                 recipient = normalize_username(message.get("to", ""))
+                text = message.get("message", "")
                 if not can_chat(username, recipient):
-                    await send_json(username, {"type": "error", "message": "Demande de conversation non acceptée."})
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Demande de conversation non acceptée."}, ensure_ascii=False))
                     continue
+                rec = save_message(username, recipient, "text", message=text)
                 await send_json(recipient, {
                     "type": "private_message",
+                    "id": rec["id"],
                     "from": username,
-                    "message": message.get("message", "")
+                    "message": text,
+                    "created_at": rec["created_at"]
                 })
+                # Synchronise les autres appareils du même compte, sans dupliquer sur l'appareil expéditeur.
+                await send_json(username, {
+                    "type": "own_message",
+                    "id": rec["id"],
+                    "to": recipient,
+                    "message": text,
+                    "created_at": rec["created_at"]
+                }, exclude_device_id=device_id)
 
             elif t == "file_message":
                 recipient = normalize_username(message.get("to", ""))
+                filename = message.get("filename", "fichier")
+                url = message.get("url", "")
                 if not can_chat(username, recipient):
-                    await send_json(username, {"type": "error", "message": "Demande de conversation non acceptée."})
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Demande de conversation non acceptée."}, ensure_ascii=False))
                     continue
+                rec = save_message(username, recipient, "file", filename=filename, url=url)
                 await send_json(recipient, {
                     "type": "file_message",
+                    "id": rec["id"],
                     "from": username,
-                    "filename": message.get("filename", "fichier"),
-                    "url": message.get("url", "")
+                    "filename": filename,
+                    "url": url,
+                    "created_at": rec["created_at"]
                 })
+                await send_json(username, {
+                    "type": "own_file_message",
+                    "id": rec["id"],
+                    "to": recipient,
+                    "filename": filename,
+                    "url": url,
+                    "created_at": rec["created_at"]
+                }, exclude_device_id=device_id)
 
     except WebSocketDisconnect:
-        connected_users.pop(username, None)
-        await broadcast_users()
+        pass
     except Exception as e:
         print("Erreur:", e)
-        connected_users.pop(username, None)
+    finally:
+        info = connected_users.get(username)
+        if info:
+            info.get("connections", {}).pop(device_id, None)
+            if not info.get("connections"):
+                connected_users.pop(username, None)
         await broadcast_users()
