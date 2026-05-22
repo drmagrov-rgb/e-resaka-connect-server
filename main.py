@@ -272,6 +272,23 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 await send_state_to(to_user)
                 await broadcast_users()
 
+            elif t == "conversation_quit":
+                to_user = normalize_username(message.get("to", ""))
+                if not to_user or to_user == username:
+                    continue
+                set_request(username, to_user, "cancelled")
+                await send_json(to_user, {
+                    "type": "conversation_quit",
+                    "from": username
+                })
+                await send_json(username, {
+                    "type": "info",
+                    "message": f"Vous avez quitté la discussion avec {to_user}."
+                })
+                await send_state_to(username)
+                await send_state_to(to_user)
+                await broadcast_users()
+
             elif t == "conversation_response":
                 from_user = normalize_username(message.get("from", ""))
                 accepted = bool(message.get("accepted", False))
