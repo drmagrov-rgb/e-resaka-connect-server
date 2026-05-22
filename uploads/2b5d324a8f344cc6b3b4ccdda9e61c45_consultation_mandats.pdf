@@ -1,0 +1,184 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Consultation Mandats</title>
+            <style>
+                @page { margin: 1cm; }
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                    font-size: 12px;
+                }
+                h1 {
+                    color: #163d8f;
+                    text-align: center;
+                    margin-bottom: 30px;
+                    font-size: 18px;
+                }
+                .filters {
+                    margin-bottom: 20px;
+                    background: #f5f5f5;
+                    padding: 15px;
+                    border-radius: 5px;
+                    border: 1px solid #ddd;
+                }
+                .summary {
+                    margin-bottom: 20px;
+                    background: #fafafa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    border: 1px solid #ddd;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                    font-size: 10px;
+                }
+                th, td {
+                    border: 1px solid #ddd;
+                    padding: 6px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f2f2f2;
+                    font-weight: bold;
+                    font-size: 11px;
+                }
+                .amount { text-align: right; }
+                .center { text-align: center; }
+                .header { font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <h1>CONSULTATION MANDATS</h1>
+
+            <div class="filters">
+                <div class="header">Filtres appliqués:</div>
+                <div>Exercice: 2026</div>
+                <div>Entité: 50101.100</div>
+                <div>Période: 2026-01-01 au 2026-04-23</div>
+                <div>Type: REJETS A L&#039;AMIABLE</div>
+            </div>
+
+            <div class="summary">
+                <div class="header">Résumé général:</div>
+                <div>Nombre total de mandats: 12</div>
+                <div>Montant total: 9 561 750,00 €</div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Date</th>
+                        <th style="width: 10%;">Compte</th>
+                        <th style="width: 18%;">SOA</th>
+                        <th style="width: 35%;">Note de rejet</th>
+                        <th style="width: 8%;" class="center">M/P</th>
+                        <th style="width: 17%;" class="amount">Montant</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>19/03/26</td>
+                        <td>6131</td>
+                        <td>00-81-7-510-51008</td>
+                        <td>(260000025550) Demande: date erroné 16 mars 2026 ...</td>
+                        <td class="center">OO</td>
+                        <td class="amount">1 401 750,00</td>
+                    </tr>
+                    <tr>
+                        <td>25/03/26</td>
+                        <td>6131</td>
+                        <td>00-16-1-040-50101</td>
+                        <td>(260000027500) Motif: Demande d&#039;Approvisionnement ...</td>
+                        <td class="center">OO</td>
+                        <td class="amount">1 417 500,00</td>
+                    </tr>
+                    <tr>
+                        <td>25/03/26</td>
+                        <td>6241</td>
+                        <td>00-52-2-E60-50101</td>
+                        <td>(260000025588) Situation de crédit omise.</td>
+                        <td class="center">BC</td>
+                        <td class="amount">264 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>27/03/26</td>
+                        <td>6241</td>
+                        <td>00-01-1-490-50101</td>
+                        <td>(260000029974) Motif: OR: Situation de Crédit: Qu...</td>
+                        <td class="center">BC</td>
+                        <td class="amount">408 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>30/03/26</td>
+                        <td>6241</td>
+                        <td>00-23-2-F15-50101</td>
+                        <td>(260000029995) Motif: Certificat Administratif: IM...</td>
+                        <td class="center">BC</td>
+                        <td class="amount">288 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>31/03/26</td>
+                        <td>6231</td>
+                        <td>00-23-3-F0B-51311</td>
+                        <td>(260000021439) TEF: dispense de visa omis, Demende...</td>
+                        <td class="center">BC</td>
+                        <td class="amount">300 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>09/04/26</td>
+                        <td>6561</td>
+                        <td>00-52-2-E60-50101</td>
+                        <td>(260000033668) Décision: Considérant incomplet</td>
+                        <td class="center">BC</td>
+                        <td class="amount">598 600,00</td>
+                    </tr>
+                    <tr>
+                        <td>09/04/26</td>
+                        <td>6561</td>
+                        <td>00-52-2-E60-50101</td>
+                        <td>(260000033681) Demande: considérant incomplet</td>
+                        <td class="center">BC</td>
+                        <td class="amount">597 900,00</td>
+                    </tr>
+                    <tr>
+                        <td>13/04/26</td>
+                        <td>6131</td>
+                        <td>00-14-6-507-50701</td>
+                        <td>(260000040242) Joindre la décision originale.</td>
+                        <td class="center">OO</td>
+                        <td class="amount">1 417 500,00</td>
+                    </tr>
+                    <tr>
+                        <td>13/04/26</td>
+                        <td>6561</td>
+                        <td>00-61-2-D50-50101</td>
+                        <td>(260000038609) Demande: considérant  à rectifier</td>
+                        <td class="center">VB</td>
+                        <td class="amount">1 970 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>22/04/26</td>
+                        <td>6231</td>
+                        <td>00-23-3-F0B-51311</td>
+                        <td>(260000049972) Date de l&#039;OR sur les pièces standa...</td>
+                        <td class="center">BC</td>
+                        <td class="amount">300 000,00</td>
+                    </tr>
+                    <tr>
+                        <td>22/04/26</td>
+                        <td>6561</td>
+                        <td>00-71-2-B40-50101</td>
+                        <td>(260000050931) Motif : La date de la décision pr�...</td>
+                        <td class="center">BC</td>
+                        <td class="amount">598 500,00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>
