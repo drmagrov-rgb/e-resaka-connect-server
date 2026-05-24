@@ -279,12 +279,12 @@ async def broadcast_users():
 
 @app.get("/")
 async def home():
-    return {"application": "e-Res@ka Connect", "version": "4.1", "status": "actif"}
+    return {"application": "e-Res@ka Connect", "version": "4.4", "status": "actif"}
 
 
 @app.get("/test")
 async def test():
-    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p><p>Version 4.1 - discussion persistante et notifications corrigées.</p>")
+    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p><p>Version 4.3 - favoris utilisateurs et discussion persistante.</p>")
 
 
 @app.get("/history/{username}/{other}")
