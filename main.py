@@ -125,6 +125,19 @@ def relation_between(current: str, other: str):
     return "none"
 
 
+def remove_relation(a: str, b: str):
+    """Supprime uniquement quand un utilisateur clique sur Quitter discussion."""
+    db = load_db()
+    removed = False
+    for req in list(db["requests"]):
+        if (req.get("from") == a and req.get("to") == b) or (req.get("from") == b and req.get("to") == a):
+            db["requests"].remove(req)
+            removed = True
+    if removed:
+        save_db(db)
+    return removed
+
+
 def set_request(from_user: str, to_user: str, status: str):
     db = load_db()
     existing = None
@@ -133,11 +146,17 @@ def set_request(from_user: str, to_user: str, status: str):
             existing = req
             break
 
+    # Annuler ne doit jamais supprimer une discussion déjà acceptée.
+    # Une discussion acceptée reste active jusqu'au bouton "Quitter discussion".
     if status == "cancelled":
-        if existing:
+        if existing and existing.get("status") != "accepted":
             db["requests"].remove(existing)
             save_db(db)
-        return
+        return existing.get("status") if existing else None
+
+    # Ne jamais transformer une relation acceptée en demande en attente.
+    if existing and existing.get("status") == "accepted" and status == "pending":
+        return "accepted"
 
     if existing:
         existing["status"] = status
@@ -154,7 +173,7 @@ def set_request(from_user: str, to_user: str, status: str):
             "updated_at": now_text()
         })
     save_db(db)
-
+    return status
 
 def requests_for_user(username: str):
     db = load_db()
@@ -260,12 +279,12 @@ async def broadcast_users():
 
 @app.get("/")
 async def home():
-    return {"application": "e-Res@ka Connect", "version": "4.0", "status": "actif"}
+    return {"application": "e-Res@ka Connect", "version": "4.1", "status": "actif"}
 
 
 @app.get("/test")
 async def test():
-    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p><p>Version 4.0 - historique serveur.</p>")
+    return HTMLResponse("<h1>e-Res@ka Connect</h1><p>Serveur actif.</p><p>Version 4.1 - discussion persistante et notifications corrigées.</p>")
 
 
 @app.get("/history/{username}/{other}")
@@ -361,6 +380,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 to_user = normalize_username(message.get("to", ""))
                 if not to_user or to_user == username:
                     continue
+                current_relation = relation_between(username, to_user)
+                if current_relation == "accepted":
+                    await websocket.send_text(json.dumps({
+                        "type": "info",
+                        "message": f"La discussion avec {to_user} est déjà active."
+                    }, ensure_ascii=False))
+                    await send_state_to(username)
+                    continue
                 set_request(username, to_user, "pending")
                 await send_json(to_user, {
                     "type": "conversation_request",
@@ -373,8 +400,14 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 
             elif t == "conversation_cancel":
                 to_user = normalize_username(message.get("to", ""))
-                set_request(username, to_user, "cancelled")
-                await send_json(to_user, {"type": "conversation_cancelled", "from": username})
+                previous_status = set_request(username, to_user, "cancelled")
+                if previous_status == "accepted":
+                    await websocket.send_text(json.dumps({
+                        "type": "info",
+                        "message": "La discussion est déjà active. Utilisez Quitter discussion pour la terminer."
+                    }, ensure_ascii=False))
+                else:
+                    await send_json(to_user, {"type": "conversation_cancelled", "from": username})
                 await send_state_to(username)
                 await send_state_to(to_user)
                 await broadcast_users()
@@ -383,7 +416,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                 to_user = normalize_username(message.get("to", ""))
                 if not to_user or to_user == username:
                     continue
-                set_request(username, to_user, "cancelled")
+                remove_relation(username, to_user)
                 await send_json(to_user, {
                     "type": "conversation_quit",
                     "from": username
